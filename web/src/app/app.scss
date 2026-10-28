@@ -246,6 +246,31 @@ tbody tr:last-child td {
   vertical-align: 0.12rem;
 }
 
+.call-button {
+  margin-left: 0.45rem;
+  padding: 0.3rem 0.62rem;
+  border: 1px solid #6f001c;
+  border-radius: 0.45rem;
+  background: #800020;
+  color: #fff;
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 800;
+  cursor: pointer;
+  vertical-align: 0.08rem;
+}
+
+.call-button:hover:not(:disabled) {
+  background: #68001a;
+}
+
+.call-button:disabled {
+  border-color: #c8ceca;
+  background: #ecefed;
+  color: #89918c;
+  cursor: not-allowed;
+}
+
 .directory-cell strong,
 .directory-cell span {
   display: block;

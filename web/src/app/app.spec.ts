@@ -44,6 +44,7 @@ describe('App', () => {
     decode$,
     heartbeat,
     highlightCallsign: vi.fn(),
+    reply: vi.fn(),
     status,
   };
   const qrz = {
@@ -180,6 +181,34 @@ describe('App', () => {
       reset: false,
     });
     expect(fixture.nativeElement.querySelector('.alert-badge').textContent).toContain('Alerted');
+    const callButton = fixture.nativeElement.querySelector('.call-button') as HTMLButtonElement;
+    expect(callButton.disabled).toBe(false);
+    callButton.click();
+    expect(wsjtx.reply).toHaveBeenCalledWith(makeDecode('CQ W1AW FN31', -14));
+    fixture.destroy();
+  });
+
+  it('disables calling when the alert did not come from CQ or QRZ', async () => {
+    qrz.hasCredentials.mockReturnValue(true);
+    qrz.lookup.mockResolvedValue({
+      callsign: 'W1AW',
+      state: 'CT',
+      country: 'United States',
+      name: 'ARRL HQ',
+      grid: 'FN31',
+    });
+    stateAlerts.alertIfNeeded.mockReturnValue(true);
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+
+    decode$.next(makeDecode('K0SWE W1AW -12', -14));
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const callButton = fixture.nativeElement.querySelector('.call-button') as HTMLButtonElement;
+    expect(callButton.disabled).toBe(true);
+    callButton.click();
+    expect(wsjtx.reply).not.toHaveBeenCalled();
     fixture.destroy();
   });
 

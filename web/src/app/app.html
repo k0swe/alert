@@ -55,6 +55,19 @@
                   <strong class="callsign">{{ heard.callsign }}</strong>
                   @if (heard.alerted) {
                     <span class="alert-badge">Alerted</span>
+                    <button
+                      class="call-button"
+                      type="button"
+                      [disabled]="!canCall(heard.callsign)"
+                      [title]="
+                        canCall(heard.callsign)
+                          ? 'Start calling ' + heard.callsign + ' in WSJT-X'
+                          : 'Calling requires a recent CQ or QRZ decode'
+                      "
+                      (click)="callStation(heard.callsign)"
+                    >
+                      Call
+                    </button>
                   }
                 </td>
                 <td class="directory-cell">

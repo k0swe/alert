@@ -83,6 +83,7 @@ export class App {
   private readonly destroyRef = inject(DestroyRef);
   private readonly settingsDialog =
     viewChild.required<ElementRef<HTMLDialogElement>>('settingsDialog');
+  private readonly actionableDecodes = new Map<string, WsjtxDecode>();
 
   protected readonly heardCallsigns = signal<HeardCallsign[]>([]);
   protected readonly usStates = US_STATES;
@@ -173,6 +174,17 @@ export class App {
     this.notificationStatus = this.getNotificationStatus();
   }
 
+  protected canCall(callsign: string): boolean {
+    return this.actionableDecodes.has(callsign);
+  }
+
+  protected callStation(callsign: string): void {
+    const decode = this.actionableDecodes.get(callsign);
+    if (decode) {
+      this.wsjtx.reply(decode);
+    }
+  }
+
   protected async saveSettings(): Promise<void> {
     const host = this.configHost.trim();
     const port = Number(this.configPort);
@@ -244,6 +256,9 @@ export class App {
     }
 
     const now = Date.now();
+    if (/^(?:CQ|QRZ)\b/i.test(decode.message.trim())) {
+      this.actionableDecodes.set(callsign, decode);
+    }
     const existing = this.heardCallsigns().find((heard) => heard.callsign === callsign);
     this.heardCallsigns.update((current) =>
       this.sortHeardCallsigns([
@@ -359,6 +374,15 @@ export class App {
 
   private removeExpiredCallsigns(): void {
     const cutoff = Date.now() - CALLSIGN_TTL_MS;
-    this.heardCallsigns.update((current) => current.filter((heard) => heard.lastHeard > cutoff));
+    this.heardCallsigns.update((current) => {
+      const active = current.filter((heard) => heard.lastHeard > cutoff);
+      const activeCallsigns = new Set(active.map((heard) => heard.callsign));
+      for (const callsign of this.actionableDecodes.keys()) {
+        if (!activeCallsigns.has(callsign)) {
+          this.actionableDecodes.delete(callsign);
+        }
+      }
+      return active;
+    });
   }
 }
