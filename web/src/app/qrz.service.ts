@@ -4,6 +4,11 @@ import { normalizePersonName } from './person-name';
 const QRZ_ENDPOINT = 'https://xmldata.qrz.com/xml/current/';
 const QRZ_USERNAME_KEY = 'qrz-username';
 const QRZ_PASSWORD_KEY = 'qrz-password';
+const QRZ_CACHE_KEY = 'qrz-directory-cache-v1';
+const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const MAX_CACHE_ENTRIES = 500;
+const BATCH_DELAY_MS = 2_000;
+const REQUEST_SPACING_MS = 1_000;
 
 export interface QrzCredentials {
   username: string;
@@ -18,6 +23,21 @@ export interface QrzCallsign {
   grid: string | null;
 }
 
+interface CachedCallsign {
+  cachedAt: number;
+  record: QrzCallsign;
+}
+
+interface QrzCache {
+  entries: Record<string, CachedCallsign>;
+}
+
+interface QueuedLookup {
+  callsign: string;
+  resolve: (record: QrzCallsign) => void;
+  reject: (error: unknown) => void;
+}
+
 export class QrzLookupError extends Error {
   constructor(message: string) {
     super(message);
@@ -29,7 +49,11 @@ export class QrzLookupError extends Error {
 export class QrzService {
   private sessionKey: string | null = null;
   private sessionPromise: Promise<string> | null = null;
-  private readonly cache = new Map<string, QrzCallsign>();
+  private readonly memoryCache = new Map<string, CachedCallsign>();
+  private readonly pendingLookups = new Map<string, Promise<QrzCallsign>>();
+  private readonly queue: QueuedLookup[] = [];
+  private batchTimer: ReturnType<typeof setTimeout> | null = null;
+  private processingQueue = false;
 
   getCredentials(): QrzCredentials {
     return {
@@ -46,25 +70,78 @@ export class QrzService {
   setCredentials(credentials: QrzCredentials): void {
     localStorage.setItem(QRZ_USERNAME_KEY, credentials.username.trim());
     localStorage.setItem(QRZ_PASSWORD_KEY, credentials.password);
-    this.reset();
+    this.resetSession();
+    this.memoryCache.clear();
   }
 
-  async lookup(callsign: string): Promise<QrzCallsign> {
+  lookup(callsign: string): Promise<QrzCallsign> {
     const normalizedCallsign = callsign.trim().toUpperCase();
-    const cached = this.cache.get(normalizedCallsign);
+    const cached = this.getCached(normalizedCallsign);
     if (cached) {
-      return cached;
+      return Promise.resolve(cached);
     }
 
-    const result = await this.lookupWithRetry(normalizedCallsign, true);
-    this.cache.set(normalizedCallsign, result);
-    return result;
+    const pending = this.pendingLookups.get(normalizedCallsign);
+    if (pending) {
+      return pending;
+    }
+
+    const lookup = new Promise<QrzCallsign>((resolve, reject) => {
+      this.queue.push({ callsign: normalizedCallsign, resolve, reject });
+    });
+    this.pendingLookups.set(normalizedCallsign, lookup);
+    this.scheduleBatch();
+    return lookup;
   }
 
   reset(): void {
-    this.sessionKey = null;
-    this.sessionPromise = null;
-    this.cache.clear();
+    this.resetSession();
+    this.memoryCache.clear();
+  }
+
+  private scheduleBatch(): void {
+    if (this.batchTimer || this.processingQueue) {
+      return;
+    }
+    this.batchTimer = setTimeout(() => {
+      this.batchTimer = null;
+      void this.processQueue();
+    }, BATCH_DELAY_MS);
+  }
+
+  private async processQueue(): Promise<void> {
+    if (this.processingQueue) {
+      return;
+    }
+    this.processingQueue = true;
+
+    try {
+      while (this.queue.length > 0) {
+        const queued = this.queue.shift();
+        if (!queued) {
+          break;
+        }
+
+        try {
+          const record = await this.lookupWithRetry(queued.callsign, true);
+          this.storeCached(queued.callsign, record);
+          queued.resolve(record);
+        } catch (error) {
+          queued.reject(error);
+        } finally {
+          this.pendingLookups.delete(queued.callsign);
+        }
+
+        if (this.queue.length > 0) {
+          await this.delay(REQUEST_SPACING_MS);
+        }
+      }
+    } finally {
+      this.processingQueue = false;
+      if (this.queue.length > 0) {
+        this.scheduleBatch();
+      }
+    }
   }
 
   private async lookupWithRetry(callsign: string, allowRelogin: boolean): Promise<QrzCallsign> {
@@ -89,7 +166,7 @@ export class QrzService {
     const error =
       this.text(document, 'Session', 'Error') ?? 'QRZ did not return a callsign record.';
     if (allowRelogin && this.isSessionError(error)) {
-      this.sessionKey = null;
+      this.resetSession();
       return this.lookupWithRetry(callsign, false);
     }
     throw new QrzLookupError(error);
@@ -153,6 +230,81 @@ export class QrzService {
       throw new QrzLookupError('QRZ.com returned an invalid XML response.');
     }
     return document;
+  }
+
+  private getCached(callsign: string): QrzCallsign | null {
+    const memoryEntry = this.memoryCache.get(callsign);
+    if (memoryEntry && Date.now() - memoryEntry.cachedAt < CACHE_TTL_MS) {
+      return memoryEntry.record;
+    }
+    if (memoryEntry) {
+      this.memoryCache.delete(callsign);
+    }
+
+    const cache = this.readCache();
+    const entry = cache.entries[this.cacheEntryKey(callsign)];
+    if (!entry) {
+      return null;
+    }
+    if (Date.now() - entry.cachedAt >= CACHE_TTL_MS) {
+      delete cache.entries[this.cacheEntryKey(callsign)];
+      this.writeCache(cache);
+      return null;
+    }
+
+    this.memoryCache.set(callsign, entry);
+    return entry.record;
+  }
+
+  private storeCached(callsign: string, record: QrzCallsign): void {
+    const entry = { cachedAt: Date.now(), record };
+    this.memoryCache.set(callsign, entry);
+    const cache = this.readCache();
+    cache.entries[this.cacheEntryKey(callsign)] = entry;
+
+    const entries = Object.entries(cache.entries);
+    if (entries.length > MAX_CACHE_ENTRIES) {
+      entries
+        .sort(([, left], [, right]) => left.cachedAt - right.cachedAt)
+        .slice(0, entries.length - MAX_CACHE_ENTRIES)
+        .forEach(([key]) => delete cache.entries[key]);
+    }
+    this.writeCache(cache);
+  }
+
+  private cacheEntryKey(callsign: string): string {
+    return `${this.getCredentials().username.trim().toUpperCase()}:${callsign}`;
+  }
+
+  private readCache(): QrzCache {
+    try {
+      const stored = JSON.parse(localStorage.getItem(QRZ_CACHE_KEY) ?? '{}') as Partial<QrzCache>;
+      return {
+        entries:
+          stored.entries && typeof stored.entries === 'object'
+            ? (stored.entries as Record<string, CachedCallsign>)
+            : {},
+      };
+    } catch {
+      return { entries: {} };
+    }
+  }
+
+  private writeCache(cache: QrzCache): void {
+    try {
+      localStorage.setItem(QRZ_CACHE_KEY, JSON.stringify(cache));
+    } catch {
+      // A full or disabled local storage cache should not prevent live lookups.
+    }
+  }
+
+  private resetSession(): void {
+    this.sessionKey = null;
+    this.sessionPromise = null;
+  }
+
+  private delay(milliseconds: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, milliseconds));
   }
 
   private text(document: Document, parentName: string, childName: string): string | null {
