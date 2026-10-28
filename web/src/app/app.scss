@@ -1,0 +1,385 @@
+:host {
+  display: block;
+  min-height: 100dvh;
+  color: #17211b;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2rem;
+  padding: 1.25rem clamp(1.25rem, 5vw, 4.5rem);
+  border-bottom: 1px solid #dfe7df;
+  background: rgba(248, 250, 247, 0.92);
+  backdrop-filter: blur(12px);
+}
+
+.brand,
+.connection-controls,
+.connection-status,
+.intro,
+.dialog-heading,
+.dialog-actions {
+  display: flex;
+  align-items: center;
+}
+
+.brand {
+  gap: 0.8rem;
+}
+
+.brand-mark {
+  display: grid;
+  width: 2.75rem;
+  height: 2.75rem;
+  place-items: center;
+  border-radius: 0.7rem;
+  background: #193d2b;
+  color: #eff8ef;
+  font-weight: 800;
+  font-size: 1.2rem;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+h1 {
+  font-size: 1.25rem;
+  line-height: 1.1;
+}
+
+h2 {
+  font-size: clamp(1.75rem, 4vw, 2.5rem);
+  line-height: 1.1;
+  letter-spacing: -0.035em;
+}
+
+.eyebrow {
+  margin-bottom: 0.22rem;
+  color: #69756e;
+  font-size: 0.72rem;
+  font-weight: 750;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.connection-controls {
+  gap: 1rem;
+}
+
+.connection-status {
+  gap: 0.55rem;
+  color: #59645d;
+  font-size: 0.88rem;
+  font-weight: 650;
+  cursor: help;
+}
+
+.status-dot {
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 50%;
+  background: #a4aaa6;
+  box-shadow: 0 0 0 4px rgba(164, 170, 166, 0.14);
+}
+
+.connection-status--agent .status-dot {
+  background: #d69928;
+  box-shadow: 0 0 0 4px rgba(214, 153, 40, 0.15);
+}
+
+.connection-status--wsjtx .status-dot {
+  background: #2b9b61;
+  box-shadow: 0 0 0 4px rgba(43, 155, 97, 0.15);
+}
+
+.button,
+.icon-button,
+input {
+  font: inherit;
+}
+
+.button {
+  min-height: 2.6rem;
+  padding: 0.62rem 1rem;
+  border: 1px solid transparent;
+  border-radius: 0.65rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    transform 120ms ease,
+    background 120ms ease,
+    border-color 120ms ease;
+}
+
+.button:hover {
+  transform: translateY(-1px);
+}
+
+.button--secondary,
+.button--ghost {
+  border-color: #ccd7ce;
+  background: #fff;
+  color: #263d30;
+}
+
+.button--primary {
+  background: #193d2b;
+  color: #fff;
+}
+
+main {
+  width: min(1120px, calc(100% - 2.5rem));
+  margin: 0 auto;
+  padding: clamp(3rem, 7vw, 5.5rem) 0;
+}
+
+.intro {
+  justify-content: space-between;
+  gap: 2rem;
+  margin-bottom: 1.5rem;
+}
+
+.subtitle {
+  margin-top: 0.65rem;
+  color: #69756e;
+  font-size: 1rem;
+}
+
+.heard-count {
+  min-width: 5.5rem;
+  padding: 0.8rem 1rem;
+  border: 1px solid #dfe7df;
+  border-radius: 0.8rem;
+  background: #fff;
+  text-align: center;
+}
+
+.heard-count strong,
+.heard-count span {
+  display: block;
+}
+
+.heard-count strong {
+  font-size: 1.35rem;
+}
+
+.heard-count span {
+  color: #768178;
+  font-size: 0.75rem;
+  font-weight: 650;
+  text-transform: uppercase;
+}
+
+.table-card {
+  overflow: hidden;
+  min-height: 23rem;
+  border: 1px solid #dfe7df;
+  border-radius: 1rem;
+  background: #fff;
+  box-shadow: 0 18px 50px rgba(28, 54, 37, 0.07);
+}
+
+.table-scroll {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  padding: 1rem 1.35rem;
+  border-bottom: 1px solid #edf1ed;
+  text-align: left;
+}
+
+th {
+  background: #f7f9f6;
+  color: #6b776f;
+  font-size: 0.72rem;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+th:nth-child(2),
+td:nth-child(2) {
+  text-align: center;
+}
+
+th:last-child,
+td:last-child {
+  text-align: right;
+}
+
+tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.callsign {
+  color: #153c28;
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+  font-size: 1.05rem;
+  letter-spacing: 0.04em;
+}
+
+.signal {
+  display: inline-block;
+  min-width: 4.7rem;
+  padding: 0.28rem 0.5rem;
+  border-radius: 999px;
+  background: #f1f3f1;
+  color: #5b665f;
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.signal--strong {
+  background: #e6f4eb;
+  color: #247248;
+}
+
+time {
+  color: #59645d;
+  font-variant-numeric: tabular-nums;
+}
+
+.empty-state {
+  display: grid;
+  min-height: 23rem;
+  place-content: center;
+  padding: 3rem 1.5rem;
+  text-align: center;
+}
+
+.empty-icon {
+  width: 3.4rem;
+  height: 3.4rem;
+  margin: 0 auto 1rem;
+  border-radius: 50%;
+  background: #edf4ee;
+  color: #2c6e49;
+  font-size: 2rem;
+  line-height: 3.4rem;
+}
+
+.empty-state h3 {
+  font-size: 1.15rem;
+}
+
+.empty-state p {
+  margin-top: 0.45rem;
+  color: #78827b;
+}
+
+.settings-dialog {
+  width: min(30rem, calc(100% - 2rem));
+  padding: 0;
+  border: 0;
+  border-radius: 1rem;
+  color: inherit;
+  box-shadow: 0 28px 80px rgba(20, 38, 27, 0.28);
+}
+
+.settings-dialog::backdrop {
+  background: rgba(14, 25, 18, 0.55);
+  backdrop-filter: blur(3px);
+}
+
+.settings-dialog form {
+  display: grid;
+  gap: 1.15rem;
+  padding: 1.6rem;
+}
+
+.dialog-heading {
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.dialog-heading h2 {
+  font-size: 1.55rem;
+}
+
+.icon-button {
+  width: 2.4rem;
+  height: 2.4rem;
+  border: 0;
+  border-radius: 50%;
+  background: #f0f3f0;
+  color: #536057;
+  font-size: 1.5rem;
+  cursor: pointer;
+}
+
+.dialog-description {
+  color: #68746c;
+  line-height: 1.55;
+}
+
+label {
+  display: grid;
+  gap: 0.4rem;
+  color: #34443a;
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.72rem 0.8rem;
+  border: 1px solid #bdc9c0;
+  border-radius: 0.58rem;
+  background: #fff;
+  color: #17211b;
+  outline: none;
+}
+
+input:focus {
+  border-color: #367253;
+  box-shadow: 0 0 0 3px rgba(54, 114, 83, 0.14);
+}
+
+.dialog-actions {
+  justify-content: flex-end;
+  gap: 0.65rem;
+  padding-top: 0.35rem;
+}
+
+@media (max-width: 650px) {
+  .app-header {
+    align-items: flex-start;
+    padding: 1rem 1.25rem;
+  }
+
+  .connection-controls {
+    align-items: flex-end;
+    flex-direction: column-reverse;
+    gap: 0.65rem;
+  }
+
+  .connection-status span:last-child {
+    display: none;
+  }
+
+  main {
+    width: min(100% - 1.5rem, 1120px);
+    padding-top: 2.5rem;
+  }
+
+  th,
+  td {
+    padding: 0.9rem 1rem;
+  }
+}
