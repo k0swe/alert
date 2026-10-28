@@ -244,20 +244,23 @@ export class App {
 
     const now = Date.now();
     const existing = this.heardCallsigns().find((heard) => heard.callsign === callsign);
-    this.heardCallsigns.update((current) => [
-      {
-        callsign,
-        signalStrength: decode.snr,
-        lastHeard: now,
-        qrzStatus: existing?.qrzStatus ?? (this.qrz.hasCredentials() ? 'loading' : 'unconfigured'),
-        state: existing?.state ?? null,
-        country: existing?.country ?? null,
-        name: existing?.name ?? null,
-        qrzError: existing?.qrzError ?? null,
-        alerted: existing?.alerted ?? false,
-      },
-      ...current.filter((heard) => heard.callsign !== callsign),
-    ]);
+    this.heardCallsigns.update((current) =>
+      this.sortHeardCallsigns([
+        {
+          callsign,
+          signalStrength: decode.snr,
+          lastHeard: now,
+          qrzStatus:
+            existing?.qrzStatus ?? (this.qrz.hasCredentials() ? 'loading' : 'unconfigured'),
+          state: existing?.state ?? null,
+          country: existing?.country ?? null,
+          name: existing?.name ?? null,
+          qrzError: existing?.qrzError ?? null,
+          alerted: existing?.alerted ?? false,
+        },
+        ...current.filter((heard) => heard.callsign !== callsign),
+      ]),
+    );
 
     if (!existing && this.qrz.hasCredentials()) {
       void this.lookupCallsign(callsign);
@@ -297,7 +300,16 @@ export class App {
 
   private updateCallsign(callsign: string, changes: Partial<HeardCallsign>): void {
     this.heardCallsigns.update((current) =>
-      current.map((heard) => (heard.callsign === callsign ? { ...heard, ...changes } : heard)),
+      this.sortHeardCallsigns(
+        current.map((heard) => (heard.callsign === callsign ? { ...heard, ...changes } : heard)),
+      ),
+    );
+  }
+
+  private sortHeardCallsigns(callsigns: HeardCallsign[]): HeardCallsign[] {
+    return callsigns.sort(
+      (left, right) =>
+        Number(right.alerted) - Number(left.alerted) || right.lastHeard - left.lastHeard,
     );
   }
 

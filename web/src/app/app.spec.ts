@@ -52,7 +52,7 @@ describe('App', () => {
     setCredentials: vi.fn(),
   };
   const stateAlerts = {
-    alertIfNeeded: vi.fn(() => false),
+    alertIfNeeded: vi.fn((_alert: { state: string }) => false),
     getSelectedStates: vi.fn(() => []),
     prepare: vi.fn(async () => 'granted'),
     setSelectedStates: vi.fn(),
@@ -170,6 +170,33 @@ describe('App', () => {
       signalStrength: -14,
     });
     expect(fixture.nativeElement.querySelector('.alert-badge').textContent).toContain('Alerted');
+    fixture.destroy();
+  });
+
+  it('keeps alerted rows above newer non-alerted rows', async () => {
+    qrz.hasCredentials.mockReturnValue(true);
+    qrz.lookup.mockImplementation(async (callsign: string) => ({
+      callsign,
+      state: callsign === 'W1AW' ? 'CT' : 'MA',
+      country: 'United States',
+      name: null,
+      grid: 'FN31',
+    }));
+    stateAlerts.alertIfNeeded.mockImplementation(({ state }: { state: string }) => state === 'CT');
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+
+    decode$.next(makeDecode('CQ W1AW FN31', -14));
+    await fixture.whenStable();
+    decode$.next(makeDecode('CQ W2ABC FN42', -9));
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const rows = [...fixture.nativeElement.querySelectorAll('tbody tr')] as HTMLElement[];
+    expect(rows).toHaveLength(2);
+    expect(rows[0].textContent).toContain('W1AW');
+    expect(rows[0].textContent).toContain('Alerted');
+    expect(rows[1].textContent).toContain('W2ABC');
     fixture.destroy();
   });
 
