@@ -117,7 +117,10 @@ describe('App', () => {
 
     decode$.next(makeDecode('CQ W1AW FN31', -14));
     fixture.detectChanges();
-    expect(fixture.nativeElement.querySelector('.callsign').textContent).toContain('W1AW');
+    const callsignLink = fixture.nativeElement.querySelector('.callsign') as HTMLAnchorElement;
+    expect(callsignLink.textContent).toContain('W1AW');
+    expect(callsignLink.href).toBe('https://www.qrz.com/db/W1AW');
+    expect(callsignLink.hasAttribute('target')).toBe(false);
     expect(fixture.nativeElement.querySelector('.signal').textContent).toContain('-14 dB');
 
     decode$.next(makeDecode('CQ W1AW FN31', -7));
