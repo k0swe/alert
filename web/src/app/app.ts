@@ -200,15 +200,7 @@ export class App {
     if (this.configAlertStates.length > 0) {
       await this.stateAlerts.prepare();
       for (const heard of this.heardCallsigns()) {
-        if (
-          heard.state &&
-          this.stateAlerts.alertIfNeeded({
-            callsign: heard.callsign,
-            state: heard.state,
-            name: heard.name,
-            signalStrength: heard.signalStrength,
-          })
-        ) {
+        if (heard.state && this.triggerStateAlert(heard, heard.state, heard.name)) {
           this.updateCallsign(heard.callsign, { alerted: true });
         }
       }
@@ -273,14 +265,7 @@ export class App {
       const record = await this.qrz.lookup(callsign);
       const heard = this.heardCallsigns().find((entry) => entry.callsign === callsign);
       const alerted = Boolean(
-        record.state &&
-        heard &&
-        this.stateAlerts.alertIfNeeded({
-          callsign,
-          state: record.state,
-          name: record.name,
-          signalStrength: heard.signalStrength,
-        }),
+        record.state && heard && this.triggerStateAlert(heard, record.state, record.name),
       );
       this.updateCallsign(callsign, {
         qrzStatus: 'found',
@@ -296,6 +281,26 @@ export class App {
         qrzError: error instanceof QrzLookupError ? error.message : 'QRZ lookup failed.',
       });
     }
+  }
+
+  private triggerStateAlert(heard: HeardCallsign, state: string, name: string | null): boolean {
+    const alerted = this.stateAlerts.alertIfNeeded({
+      callsign: heard.callsign,
+      state,
+      name,
+      signalStrength: heard.signalStrength,
+    });
+    if (alerted) {
+      this.wsjtx.highlightCallsign({
+        id: '',
+        callsign: heard.callsign,
+        backgroundColor: '#800020',
+        foregroundColor: '#ffffff',
+        highlightLast: false,
+        reset: false,
+      });
+    }
+    return alerted;
   }
 
   private updateCallsign(callsign: string, changes: Partial<HeardCallsign>): void {

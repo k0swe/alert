@@ -43,6 +43,7 @@ describe('App', () => {
     connected: wsjtxConnected,
     decode$,
     heartbeat,
+    highlightCallsign: vi.fn(),
     status,
   };
   const qrz = {
@@ -169,7 +170,35 @@ describe('App', () => {
       name: 'ARRL HQ',
       signalStrength: -14,
     });
+    expect(wsjtx.highlightCallsign).toHaveBeenCalledWith({
+      id: '',
+      callsign: 'W1AW',
+      backgroundColor: '#800020',
+      foregroundColor: '#ffffff',
+      highlightLast: false,
+      reset: false,
+    });
     expect(fixture.nativeElement.querySelector('.alert-badge').textContent).toContain('Alerted');
+    fixture.destroy();
+  });
+
+  it('does not highlight a callsign when its state does not alert', async () => {
+    qrz.hasCredentials.mockReturnValue(true);
+    qrz.lookup.mockResolvedValue({
+      callsign: 'W1AW',
+      state: 'CT',
+      country: 'United States',
+      name: null,
+      grid: 'FN31',
+    });
+    stateAlerts.alertIfNeeded.mockReturnValue(false);
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+
+    decode$.next(makeDecode('CQ W1AW FN31', -14));
+    await fixture.whenStable();
+
+    expect(wsjtx.highlightCallsign).not.toHaveBeenCalled();
     fixture.destroy();
   });
 
