@@ -126,6 +126,10 @@ export class StateAlertService {
     return true;
   }
 
+  clearRecentAlert(callsign: string, state: string): void {
+    this.recentAlerts.delete(`${callsign}:${state.toUpperCase()}`);
+  }
+
   async test(): Promise<void> {
     await this.prepare();
     this.playSound();

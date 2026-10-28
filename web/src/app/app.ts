@@ -197,12 +197,21 @@ export class App {
       oldCredentials.username !== this.qrzUsername.trim() ||
       oldCredentials.password !== this.qrzPassword;
     this.stateAlerts.setSelectedStates(this.configAlertStates);
-    if (this.configAlertStates.length > 0) {
+    const selectedStates = new Set(this.configAlertStates);
+    if (selectedStates.size > 0) {
       await this.stateAlerts.prepare();
-      for (const heard of this.heardCallsigns()) {
-        if (heard.state && this.triggerStateAlert(heard, heard.state, heard.name)) {
-          this.updateCallsign(heard.callsign, { alerted: true });
-        }
+    }
+    for (const heard of this.heardCallsigns()) {
+      if (!heard.state) {
+        continue;
+      }
+      if (heard.alerted && !selectedStates.has(heard.state.toUpperCase())) {
+        this.clearStateAlert(heard);
+      } else if (
+        selectedStates.has(heard.state.toUpperCase()) &&
+        this.triggerStateAlert(heard, heard.state, heard.name)
+      ) {
+        this.updateCallsign(heard.callsign, { alerted: true });
       }
     }
 
@@ -301,6 +310,22 @@ export class App {
       });
     }
     return alerted;
+  }
+
+  private clearStateAlert(heard: HeardCallsign): void {
+    if (!heard.state) {
+      return;
+    }
+    this.stateAlerts.clearRecentAlert(heard.callsign, heard.state);
+    this.wsjtx.highlightCallsign({
+      id: '',
+      callsign: heard.callsign,
+      backgroundColor: '',
+      foregroundColor: '',
+      highlightLast: false,
+      reset: true,
+    });
+    this.updateCallsign(heard.callsign, { alerted: false });
   }
 
   private updateCallsign(callsign: string, changes: Partial<HeardCallsign>): void {

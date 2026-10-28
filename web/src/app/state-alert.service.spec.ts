@@ -89,6 +89,15 @@ describe('StateAlertService', () => {
     expect(NotificationMock.instances).toHaveLength(2);
   });
 
+  it('allows an alert to fire again after its recent-alert state is cleared', () => {
+    service.setSelectedStates(['CT']);
+
+    expect(service.alertIfNeeded(makeAlert('CT'))).toBe(true);
+    expect(service.alertIfNeeded(makeAlert('CT'))).toBe(false);
+    service.clearRecentAlert('W1AW', 'CT');
+    expect(service.alertIfNeeded(makeAlert('CT'))).toBe(true);
+  });
+
   it('requests notification permission when preparing alerts', async () => {
     NotificationMock.permission = 'default';
     NotificationMock.requestPermission.mockImplementationOnce(async () => {

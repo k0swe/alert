@@ -54,7 +54,8 @@ describe('App', () => {
   };
   const stateAlerts = {
     alertIfNeeded: vi.fn((_alert: { state: string }) => false),
-    getSelectedStates: vi.fn(() => []),
+    clearRecentAlert: vi.fn(),
+    getSelectedStates: vi.fn((): string[] => []),
     prepare: vi.fn(async () => 'granted'),
     setSelectedStates: vi.fn(),
     test: vi.fn(async () => undefined),
@@ -179,6 +180,46 @@ describe('App', () => {
       reset: false,
     });
     expect(fixture.nativeElement.querySelector('.alert-badge').textContent).toContain('Alerted');
+    fixture.destroy();
+  });
+
+  it('clears an existing alert and WSJT-X highlight when its state is deselected', async () => {
+    qrz.hasCredentials.mockReturnValue(true);
+    qrz.lookup.mockResolvedValue({
+      callsign: 'W1AW',
+      state: 'CT',
+      country: 'United States',
+      name: 'ARRL HQ',
+      grid: 'FN31',
+    });
+    stateAlerts.getSelectedStates.mockReturnValue(['CT']);
+    stateAlerts.alertIfNeeded.mockReturnValue(true);
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+
+    decode$.next(makeDecode('CQ W1AW FN31', -14));
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.alert-badge')).not.toBeNull();
+
+    const app = fixture.componentInstance as any;
+    app.configHost = 'localhost';
+    app.configPort = 8081;
+    app.configAlertStates = [];
+    fixture.nativeElement.querySelector('dialog').close = vi.fn();
+    await app.saveSettings();
+    fixture.detectChanges();
+
+    expect(stateAlerts.clearRecentAlert).toHaveBeenCalledWith('W1AW', 'CT');
+    expect(wsjtx.highlightCallsign).toHaveBeenLastCalledWith({
+      id: '',
+      callsign: 'W1AW',
+      backgroundColor: '',
+      foregroundColor: '',
+      highlightLast: false,
+      reset: true,
+    });
+    expect(fixture.nativeElement.querySelector('.alert-badge')).toBeNull();
     fixture.destroy();
   });
 
