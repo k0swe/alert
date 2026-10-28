@@ -5,6 +5,7 @@ import { Subject } from 'rxjs';
 import { describe, expect, it, vi } from 'vitest';
 import { App, extractCallsign } from './app';
 import { QrzService } from './qrz.service';
+import { StateAlertService } from './state-alert.service';
 
 describe('extractCallsign', () => {
   it.each([
@@ -50,6 +51,13 @@ describe('App', () => {
     lookup: vi.fn(),
     setCredentials: vi.fn(),
   };
+  const stateAlerts = {
+    alertIfNeeded: vi.fn((_alert: { state: string }) => false),
+    getSelectedStates: vi.fn(() => []),
+    prepare: vi.fn(async () => 'granted'),
+    setSelectedStates: vi.fn(),
+    test: vi.fn(async () => undefined),
+  };
 
   beforeEach(async () => {
     agentConnected.set(false);
@@ -57,12 +65,15 @@ describe('App', () => {
     vi.clearAllMocks();
     qrz.getCredentials.mockReturnValue({ username: '', password: '' });
     qrz.hasCredentials.mockReturnValue(false);
+    stateAlerts.alertIfNeeded.mockReturnValue(false);
+    stateAlerts.getSelectedStates.mockReturnValue([]);
     await TestBed.configureTestingModule({
       imports: [App],
       providers: [
         { provide: AgentService, useValue: agent },
         { provide: WsjtxService, useValue: wsjtx },
         { provide: QrzService, useValue: qrz },
+        { provide: StateAlertService, useValue: stateAlerts },
       ],
     }).compileComponents();
   });
@@ -132,6 +143,60 @@ describe('App', () => {
     expect(qrz.lookup).toHaveBeenCalledWith('W1AW');
     expect(fixture.nativeElement.querySelector('.directory-cell').textContent).toContain('CT');
     expect(fixture.nativeElement.querySelector('.directory-cell').textContent).toContain('ARRL HQ');
+    fixture.destroy();
+  });
+
+  it('triggers and marks an alert when QRZ returns a selected state', async () => {
+    qrz.hasCredentials.mockReturnValue(true);
+    qrz.lookup.mockResolvedValue({
+      callsign: 'W1AW',
+      state: 'CT',
+      country: 'United States',
+      name: 'ARRL HQ',
+      grid: 'FN31',
+    });
+    stateAlerts.alertIfNeeded.mockReturnValue(true);
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+
+    decode$.next(makeDecode('CQ W1AW FN31', -14));
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(stateAlerts.alertIfNeeded).toHaveBeenCalledWith({
+      callsign: 'W1AW',
+      state: 'CT',
+      name: 'ARRL HQ',
+      signalStrength: -14,
+    });
+    expect(fixture.nativeElement.querySelector('.alert-badge').textContent).toContain('Alerted');
+    fixture.destroy();
+  });
+
+  it('keeps alerted rows above newer non-alerted rows', async () => {
+    qrz.hasCredentials.mockReturnValue(true);
+    qrz.lookup.mockImplementation(async (callsign: string) => ({
+      callsign,
+      state: callsign === 'W1AW' ? 'CT' : 'MA',
+      country: 'United States',
+      name: null,
+      grid: 'FN31',
+    }));
+    stateAlerts.alertIfNeeded.mockImplementation(({ state }: { state: string }) => state === 'CT');
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+
+    decode$.next(makeDecode('CQ W1AW FN31', -14));
+    await fixture.whenStable();
+    decode$.next(makeDecode('CQ W2ABC FN42', -9));
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const rows = [...fixture.nativeElement.querySelectorAll('tbody tr')] as HTMLElement[];
+    expect(rows).toHaveLength(2);
+    expect(rows[0].textContent).toContain('W1AW');
+    expect(rows[0].textContent).toContain('Alerted');
+    expect(rows[1].textContent).toContain('W2ABC');
     fixture.destroy();
   });
 

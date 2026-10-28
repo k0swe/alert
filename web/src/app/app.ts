@@ -13,6 +13,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { AgentService, WsjtxDecode, WsjtxService } from 'ngx-kel-agent';
 import { interval } from 'rxjs';
 import { QrzLookupError, QrzService } from './qrz.service';
+import { StateAlertService, US_STATES } from './state-alert.service';
 
 const CALLSIGN_TTL_MS = 5 * 60 * 1000;
 
@@ -25,6 +26,7 @@ export interface HeardCallsign {
   country: string | null;
   name: string | null;
   qrzError: string | null;
+  alerted: boolean;
 }
 
 const CALLSIGN_PATTERN = /^(?=.{3,15}$)(?=.*[A-Z])(?=.*\d)[A-Z0-9]+(?:\/[A-Z0-9]+)*$/;
@@ -77,11 +79,13 @@ export class App {
   private readonly agent = inject(AgentService);
   private readonly wsjtx = inject(WsjtxService);
   private readonly qrz = inject(QrzService);
+  private readonly stateAlerts = inject(StateAlertService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly settingsDialog =
     viewChild.required<ElementRef<HTMLDialogElement>>('settingsDialog');
 
   protected readonly heardCallsigns = signal<HeardCallsign[]>([]);
+  protected readonly usStates = US_STATES;
   protected readonly connectionLevel = computed<ConnectionLevel>(() => {
     if (!this.agent.connected()) {
       return 'disconnected';
@@ -118,6 +122,8 @@ export class App {
   protected configPort = 8081;
   protected qrzUsername = '';
   protected qrzPassword = '';
+  protected configAlertStates: string[] = [];
+  protected notificationStatus = '';
 
   constructor() {
     this.agent.init();
@@ -135,6 +141,8 @@ export class App {
     const credentials = this.qrz.getCredentials();
     this.qrzUsername = credentials.username;
     this.qrzPassword = credentials.password;
+    this.configAlertStates = this.stateAlerts.getSelectedStates();
+    this.notificationStatus = this.getNotificationStatus();
     this.settingsDialog().nativeElement.showModal();
   }
 
@@ -142,7 +150,30 @@ export class App {
     this.settingsDialog().nativeElement.close();
   }
 
-  protected saveSettings(): void {
+  protected toggleAlertState(state: string, selected: boolean): void {
+    const states = new Set(this.configAlertStates);
+    selected ? states.add(state) : states.delete(state);
+    this.configAlertStates = US_STATES.map(({ code }) => code).filter((code) => states.has(code));
+  }
+
+  protected toggleAllAlertStates(selected: boolean): void {
+    this.configAlertStates = selected ? US_STATES.map(({ code }) => code) : [];
+  }
+
+  protected allAlertStatesSelected(): boolean {
+    return this.configAlertStates.length === US_STATES.length;
+  }
+
+  protected someAlertStatesSelected(): boolean {
+    return this.configAlertStates.length > 0 && !this.allAlertStatesSelected();
+  }
+
+  protected async testAlert(): Promise<void> {
+    await this.stateAlerts.test();
+    this.notificationStatus = this.getNotificationStatus();
+  }
+
+  protected async saveSettings(): Promise<void> {
     const host = this.configHost.trim();
     const port = Number(this.configPort);
     if (!host || !Number.isInteger(port) || port < 1 || port > 65535) {
@@ -165,6 +196,24 @@ export class App {
     const qrzChanged =
       oldCredentials.username !== this.qrzUsername.trim() ||
       oldCredentials.password !== this.qrzPassword;
+    this.stateAlerts.setSelectedStates(this.configAlertStates);
+    if (this.configAlertStates.length > 0) {
+      await this.stateAlerts.prepare();
+      for (const heard of this.heardCallsigns()) {
+        if (
+          heard.state &&
+          this.stateAlerts.alertIfNeeded({
+            callsign: heard.callsign,
+            state: heard.state,
+            name: heard.name,
+            signalStrength: heard.signalStrength,
+          })
+        ) {
+          this.updateCallsign(heard.callsign, { alerted: true });
+        }
+      }
+    }
+
     if (qrzChanged) {
       this.qrz.setCredentials({
         username: this.qrzUsername,
@@ -195,19 +244,23 @@ export class App {
 
     const now = Date.now();
     const existing = this.heardCallsigns().find((heard) => heard.callsign === callsign);
-    this.heardCallsigns.update((current) => [
-      {
-        callsign,
-        signalStrength: decode.snr,
-        lastHeard: now,
-        qrzStatus: existing?.qrzStatus ?? (this.qrz.hasCredentials() ? 'loading' : 'unconfigured'),
-        state: existing?.state ?? null,
-        country: existing?.country ?? null,
-        name: existing?.name ?? null,
-        qrzError: existing?.qrzError ?? null,
-      },
-      ...current.filter((heard) => heard.callsign !== callsign),
-    ]);
+    this.heardCallsigns.update((current) =>
+      this.sortHeardCallsigns([
+        {
+          callsign,
+          signalStrength: decode.snr,
+          lastHeard: now,
+          qrzStatus:
+            existing?.qrzStatus ?? (this.qrz.hasCredentials() ? 'loading' : 'unconfigured'),
+          state: existing?.state ?? null,
+          country: existing?.country ?? null,
+          name: existing?.name ?? null,
+          qrzError: existing?.qrzError ?? null,
+          alerted: existing?.alerted ?? false,
+        },
+        ...current.filter((heard) => heard.callsign !== callsign),
+      ]),
+    );
 
     if (!existing && this.qrz.hasCredentials()) {
       void this.lookupCallsign(callsign);
@@ -218,12 +271,24 @@ export class App {
     this.updateCallsign(callsign, { qrzStatus: 'loading', qrzError: null });
     try {
       const record = await this.qrz.lookup(callsign);
+      const heard = this.heardCallsigns().find((entry) => entry.callsign === callsign);
+      const alerted = Boolean(
+        record.state &&
+        heard &&
+        this.stateAlerts.alertIfNeeded({
+          callsign,
+          state: record.state,
+          name: record.name,
+          signalStrength: heard.signalStrength,
+        }),
+      );
       this.updateCallsign(callsign, {
         qrzStatus: 'found',
         state: record.state,
         country: record.country,
         name: record.name,
         qrzError: null,
+        alerted: heard?.alerted || alerted,
       });
     } catch (error) {
       this.updateCallsign(callsign, {
@@ -235,8 +300,31 @@ export class App {
 
   private updateCallsign(callsign: string, changes: Partial<HeardCallsign>): void {
     this.heardCallsigns.update((current) =>
-      current.map((heard) => (heard.callsign === callsign ? { ...heard, ...changes } : heard)),
+      this.sortHeardCallsigns(
+        current.map((heard) => (heard.callsign === callsign ? { ...heard, ...changes } : heard)),
+      ),
     );
+  }
+
+  private sortHeardCallsigns(callsigns: HeardCallsign[]): HeardCallsign[] {
+    return callsigns.sort(
+      (left, right) =>
+        Number(right.alerted) - Number(left.alerted) || right.lastHeard - left.lastHeard,
+    );
+  }
+
+  private getNotificationStatus(): string {
+    if (!('Notification' in globalThis)) {
+      return 'Desktop notifications are unavailable in this browser; sound alerts may still work.';
+    }
+    switch (Notification.permission) {
+      case 'granted':
+        return 'Desktop notifications are enabled.';
+      case 'denied':
+        return 'Desktop notifications are blocked; sound alerts may still work.';
+      default:
+        return 'Your browser will ask for notification permission when alert states are saved.';
+    }
   }
 
   private removeExpiredCallsigns(): void {
