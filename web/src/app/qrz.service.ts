@@ -235,7 +235,9 @@ export class QrzService {
   private getCached(callsign: string): QrzCallsign | null {
     const memoryEntry = this.memoryCache.get(callsign);
     if (memoryEntry && Date.now() - memoryEntry.cachedAt < CACHE_TTL_MS) {
-      return memoryEntry.record;
+      const record = this.normalizeCachedRecord(memoryEntry.record);
+      memoryEntry.record = record;
+      return record;
     }
     if (memoryEntry) {
       this.memoryCache.delete(callsign);
@@ -252,8 +254,21 @@ export class QrzService {
       return null;
     }
 
+    const record = this.normalizeCachedRecord(entry.record);
+    if (record !== entry.record) {
+      entry.record = record;
+      this.writeCache(cache);
+    }
     this.memoryCache.set(callsign, entry);
-    return entry.record;
+    return record;
+  }
+
+  private normalizeCachedRecord(record: QrzCallsign): QrzCallsign {
+    if (!record.name) {
+      return record;
+    }
+    const name = normalizePersonName(record.name);
+    return name === record.name ? record : { ...record, name };
   }
 
   private storeCached(callsign: string, record: QrzCallsign): void {

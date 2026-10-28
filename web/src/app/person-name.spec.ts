@@ -17,13 +17,16 @@ describe('normalizePersonName', () => {
     ['ROBERT DOWNEY, JR.', 'Robert Downey, Jr.'],
     ['JANE DOE PHD', 'Jane Doe PHD'],
     ['FRED "THE BOSS" LLOYD', 'Fred "The Boss" Lloyd'],
+    ['JAMES N "Noel" WARF', 'James N "Noel" Warf'],
+    ['WILLIAM "Mac" MCDONALD JR.', 'William "Mac" McDonald Jr.'],
     ['  FRED   LLOYD  ', 'Fred Lloyd'],
   ])('normalizes %s', (input, expected) => {
     expect(normalizePersonName(input)).toBe(expected);
   });
 
-  it('preserves user-supplied mixed capitalization', () => {
+  it('preserves user-supplied mixed capitalization word by word', () => {
     expect(normalizePersonName('Neil deGrasse Tyson')).toBe('Neil deGrasse Tyson');
     expect(normalizePersonName('LeVar Burton')).toBe('LeVar Burton');
+    expect(normalizePersonName('JAMES deGrasse TYSON')).toBe('James deGrasse Tyson');
   });
 });
