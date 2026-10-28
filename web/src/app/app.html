@@ -43,6 +43,7 @@
           <thead>
             <tr>
               <th scope="col">Callsign</th>
+              <th scope="col">Directory</th>
               <th scope="col">Signal</th>
               <th scope="col">Last heard</th>
             </tr>
@@ -52,6 +53,29 @@
               <tr>
                 <td>
                   <strong class="callsign">{{ heard.callsign }}</strong>
+                </td>
+                <td class="directory-cell">
+                  @switch (heard.qrzStatus) {
+                    @case ('found') {
+                      <strong>{{ heard.state || heard.country || 'Unknown' }}</strong>
+                      @if (heard.name) {
+                        <span>{{ heard.name }}</span>
+                      }
+                    }
+                    @case ('loading') {
+                      <span class="lookup-status">Looking up…</span>
+                    }
+                    @case ('error') {
+                      <span class="lookup-status lookup-status--error" [title]="heard.qrzError">
+                        Lookup failed
+                      </span>
+                    }
+                    @default {
+                      <button class="text-button" type="button" (click)="openSettings()">
+                        Configure QRZ
+                      </button>
+                    }
+                  }
                 </td>
                 <td>
                   <span class="signal" [class.signal--strong]="heard.signalStrength >= -10">
@@ -88,8 +112,8 @@
   <form (ngSubmit)="saveSettings()">
     <div class="dialog-heading">
       <div>
-        <p class="eyebrow">Connection</p>
-        <h2>Configure kel-agent</h2>
+        <p class="eyebrow">Settings</p>
+        <h2>Configure Alert</h2>
       </div>
       <button
         class="icon-button"
@@ -102,34 +126,62 @@
     </div>
 
     <p class="dialog-description">
-      Enter the host and port for the kel-agent WebSocket server. These settings are stored only in
-      this browser.
+      Connection details and QRZ.com credentials are stored unencrypted in this browser's local
+      storage.
     </p>
 
-    <label>
-      <span>Host</span>
-      <input
-        name="host"
-        type="text"
-        required
-        autocomplete="url"
-        placeholder="localhost"
-        [(ngModel)]="configHost"
-      />
-    </label>
+    <fieldset>
+      <legend>kel-agent WebSocket</legend>
 
-    <label>
-      <span>Port</span>
-      <input
-        name="port"
-        type="number"
-        required
-        min="1"
-        max="65535"
-        inputmode="numeric"
-        [(ngModel)]="configPort"
-      />
-    </label>
+      <label>
+        <span>Host</span>
+        <input
+          name="host"
+          type="text"
+          required
+          autocomplete="url"
+          placeholder="localhost"
+          [(ngModel)]="configHost"
+        />
+      </label>
+
+      <label>
+        <span>Port</span>
+        <input
+          name="port"
+          type="number"
+          required
+          min="1"
+          max="65535"
+          inputmode="numeric"
+          [(ngModel)]="configPort"
+        />
+      </label>
+    </fieldset>
+
+    <fieldset>
+      <legend>QRZ.com directory</legend>
+
+      <label>
+        <span>Username</span>
+        <input name="qrzUsername" type="text" autocomplete="username" [(ngModel)]="qrzUsername" />
+      </label>
+
+      <label>
+        <span>Password</span>
+        <input
+          name="qrzPassword"
+          type="password"
+          autocomplete="current-password"
+          [(ngModel)]="qrzPassword"
+        />
+      </label>
+
+      <p class="field-hint">
+        Requires QRZ XML Logbook Data service access. This uses the directory XML API, not the
+        logbook API.
+      </p>
+    </fieldset>
 
     <div class="dialog-actions">
       <button class="button button--ghost" type="button" (click)="closeSettings()">Cancel</button>

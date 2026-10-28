@@ -211,8 +211,8 @@ th {
   text-transform: uppercase;
 }
 
-th:nth-child(2),
-td:nth-child(2) {
+th:nth-child(3),
+td:nth-child(3) {
   text-align: center;
 }
 
@@ -230,6 +230,44 @@ tbody tr:last-child td {
   font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
   font-size: 1.05rem;
   letter-spacing: 0.04em;
+}
+
+.directory-cell strong,
+.directory-cell span {
+  display: block;
+}
+
+.directory-cell strong {
+  color: #214f35;
+}
+
+.directory-cell > span:not(:first-child) {
+  margin-top: 0.18rem;
+  color: #758078;
+  font-size: 0.78rem;
+}
+
+.lookup-status {
+  color: #758078;
+  font-size: 0.84rem;
+}
+
+.lookup-status--error {
+  color: #a23d3d;
+  cursor: help;
+}
+
+.text-button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #2f7250;
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 0.18rem;
+  cursor: pointer;
 }
 
 .signal {
@@ -283,7 +321,8 @@ time {
 }
 
 .settings-dialog {
-  width: min(30rem, calc(100% - 2rem));
+  width: min(32rem, calc(100% - 2rem));
+  max-height: calc(100dvh - 2rem);
   padding: 0;
   border: 0;
   border-radius: 1rem;
@@ -299,6 +338,8 @@ time {
 .settings-dialog form {
   display: grid;
   gap: 1.15rem;
+  overflow-y: auto;
+  max-height: calc(100dvh - 2rem);
   padding: 1.6rem;
 }
 
@@ -327,6 +368,24 @@ time {
   line-height: 1.55;
 }
 
+fieldset {
+  display: grid;
+  gap: 0.9rem;
+  min-width: 0;
+  margin: 0;
+  padding: 1rem;
+  border: 1px solid #dfe7df;
+  border-radius: 0.75rem;
+}
+
+legend {
+  padding: 0 0.35rem;
+  color: #34443a;
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
 label {
   display: grid;
   gap: 0.4rem;
@@ -349,6 +408,12 @@ input {
 input:focus {
   border-color: #367253;
   box-shadow: 0 0 0 3px rgba(54, 114, 83, 0.14);
+}
+
+.field-hint {
+  color: #78827b;
+  font-size: 0.78rem;
+  line-height: 1.45;
 }
 
 .dialog-actions {

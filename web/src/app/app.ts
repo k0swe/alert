@@ -12,6 +12,7 @@ import { FormsModule } from '@angular/forms';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { AgentService, WsjtxDecode, WsjtxService } from 'ngx-kel-agent';
 import { interval } from 'rxjs';
+import { QrzLookupError, QrzService } from './qrz.service';
 
 const CALLSIGN_TTL_MS = 5 * 60 * 1000;
 
@@ -19,6 +20,11 @@ export interface HeardCallsign {
   callsign: string;
   signalStrength: number;
   lastHeard: number;
+  qrzStatus: 'loading' | 'found' | 'error' | 'unconfigured';
+  state: string | null;
+  country: string | null;
+  name: string | null;
+  qrzError: string | null;
 }
 
 const CALLSIGN_PATTERN = /^(?=.{3,15}$)(?=.*[A-Z])(?=.*\d)[A-Z0-9]+(?:\/[A-Z0-9]+)*$/;
@@ -70,6 +76,7 @@ type ConnectionLevel = 'disconnected' | 'agent' | 'wsjtx';
 export class App {
   private readonly agent = inject(AgentService);
   private readonly wsjtx = inject(WsjtxService);
+  private readonly qrz = inject(QrzService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly settingsDialog =
     viewChild.required<ElementRef<HTMLDialogElement>>('settingsDialog');
@@ -109,6 +116,8 @@ export class App {
 
   protected configHost = '';
   protected configPort = 8081;
+  protected qrzUsername = '';
+  protected qrzPassword = '';
 
   constructor() {
     this.agent.init();
@@ -123,6 +132,9 @@ export class App {
   protected openSettings(): void {
     this.configHost = this.agent.getHost();
     this.configPort = this.agent.getPort();
+    const credentials = this.qrz.getCredentials();
+    this.qrzUsername = credentials.username;
+    this.qrzPassword = credentials.password;
     this.settingsDialog().nativeElement.showModal();
   }
 
@@ -148,6 +160,30 @@ export class App {
     if (!hostChanged && !portChanged) {
       this.agent.connect();
     }
+
+    const oldCredentials = this.qrz.getCredentials();
+    const qrzChanged =
+      oldCredentials.username !== this.qrzUsername.trim() ||
+      oldCredentials.password !== this.qrzPassword;
+    if (qrzChanged) {
+      this.qrz.setCredentials({
+        username: this.qrzUsername,
+        password: this.qrzPassword,
+      });
+      for (const heard of this.heardCallsigns()) {
+        if (this.qrz.hasCredentials()) {
+          void this.lookupCallsign(heard.callsign);
+        } else {
+          this.updateCallsign(heard.callsign, {
+            qrzStatus: 'unconfigured',
+            state: null,
+            country: null,
+            name: null,
+            qrzError: null,
+          });
+        }
+      }
+    }
     this.closeSettings();
   }
 
@@ -158,14 +194,49 @@ export class App {
     }
 
     const now = Date.now();
+    const existing = this.heardCallsigns().find((heard) => heard.callsign === callsign);
     this.heardCallsigns.update((current) => [
       {
         callsign,
         signalStrength: decode.snr,
         lastHeard: now,
+        qrzStatus: existing?.qrzStatus ?? (this.qrz.hasCredentials() ? 'loading' : 'unconfigured'),
+        state: existing?.state ?? null,
+        country: existing?.country ?? null,
+        name: existing?.name ?? null,
+        qrzError: existing?.qrzError ?? null,
       },
       ...current.filter((heard) => heard.callsign !== callsign),
     ]);
+
+    if (!existing && this.qrz.hasCredentials()) {
+      void this.lookupCallsign(callsign);
+    }
+  }
+
+  private async lookupCallsign(callsign: string): Promise<void> {
+    this.updateCallsign(callsign, { qrzStatus: 'loading', qrzError: null });
+    try {
+      const record = await this.qrz.lookup(callsign);
+      this.updateCallsign(callsign, {
+        qrzStatus: 'found',
+        state: record.state,
+        country: record.country,
+        name: record.name,
+        qrzError: null,
+      });
+    } catch (error) {
+      this.updateCallsign(callsign, {
+        qrzStatus: 'error',
+        qrzError: error instanceof QrzLookupError ? error.message : 'QRZ lookup failed.',
+      });
+    }
+  }
+
+  private updateCallsign(callsign: string, changes: Partial<HeardCallsign>): void {
+    this.heardCallsigns.update((current) =>
+      current.map((heard) => (heard.callsign === callsign ? { ...heard, ...changes } : heard)),
+    );
   }
 
   private removeExpiredCallsigns(): void {

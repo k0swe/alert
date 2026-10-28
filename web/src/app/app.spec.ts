@@ -4,6 +4,7 @@ import { AgentService, WsjtxDecode, WsjtxService } from 'ngx-kel-agent';
 import { Subject } from 'rxjs';
 import { describe, expect, it, vi } from 'vitest';
 import { App, extractCallsign } from './app';
+import { QrzService } from './qrz.service';
 
 describe('extractCallsign', () => {
   it.each([
@@ -43,16 +44,25 @@ describe('App', () => {
     heartbeat,
     status,
   };
+  const qrz = {
+    getCredentials: vi.fn(() => ({ username: '', password: '' })),
+    hasCredentials: vi.fn(() => false),
+    lookup: vi.fn(),
+    setCredentials: vi.fn(),
+  };
 
   beforeEach(async () => {
     agentConnected.set(false);
     wsjtxConnected.set(false);
     vi.clearAllMocks();
+    qrz.getCredentials.mockReturnValue({ username: '', password: '' });
+    qrz.hasCredentials.mockReturnValue(false);
     await TestBed.configureTestingModule({
       imports: [App],
       providers: [
         { provide: AgentService, useValue: agent },
         { provide: WsjtxService, useValue: wsjtx },
+        { provide: QrzService, useValue: qrz },
       ],
     }).compileComponents();
   });
@@ -100,6 +110,28 @@ describe('App', () => {
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelectorAll('tbody tr')).toHaveLength(1);
     expect(fixture.nativeElement.querySelector('.signal').textContent).toContain('-7 dB');
+    fixture.destroy();
+  });
+
+  it('enriches a heard callsign with its QRZ directory result', async () => {
+    qrz.hasCredentials.mockReturnValue(true);
+    qrz.lookup.mockResolvedValue({
+      callsign: 'W1AW',
+      state: 'CT',
+      country: 'United States',
+      name: 'ARRL HQ',
+      grid: 'FN31',
+    });
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+
+    decode$.next(makeDecode('CQ W1AW FN31', -14));
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(qrz.lookup).toHaveBeenCalledWith('W1AW');
+    expect(fixture.nativeElement.querySelector('.directory-cell').textContent).toContain('CT');
+    expect(fixture.nativeElement.querySelector('.directory-cell').textContent).toContain('ARRL HQ');
     fixture.destroy();
   });
 
