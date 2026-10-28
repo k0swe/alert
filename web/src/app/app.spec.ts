@@ -67,6 +67,26 @@ describe('App', () => {
     fixture.destroy();
   });
 
+  it('distinguishes an agent connection from a full WSJT-X connection', () => {
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+    const connectionStatus = () =>
+      fixture.nativeElement.querySelector('.connection-status') as HTMLElement;
+
+    agentConnected.set(true);
+    fixture.detectChanges();
+    expect(connectionStatus().textContent).toContain('Waiting for WSJT-X');
+    expect(connectionStatus().classList).toContain('connection-status--agent');
+    expect(connectionStatus().title).toContain('no WSJT-X messages');
+
+    wsjtxConnected.set(true);
+    fixture.detectChanges();
+    expect(connectionStatus().textContent).toContain('WSJT-X connected');
+    expect(connectionStatus().classList).toContain('connection-status--wsjtx');
+    expect(connectionStatus().title).toContain('through kel-agent');
+    fixture.destroy();
+  });
+
   it('adds and updates heard callsigns from decodes', () => {
     const fixture = TestBed.createComponent(App);
     fixture.detectChanges();
