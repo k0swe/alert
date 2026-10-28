@@ -10,7 +10,7 @@
     "test:ci": "ng test --watch=false"
   },
   "private": true,
-  "packageManager": "npm@11.21.1",
+  "packageManager": "npm@12.2.1",
   "dependencies": {
     "@angular/common": "^22.2.0",
     "@angular/compiler": "^22.2.0",
