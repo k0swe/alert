@@ -52,7 +52,13 @@
             @for (heard of heardCallsigns(); track heard.callsign) {
               <tr>
                 <td>
-                  <strong class="callsign">{{ heard.callsign }}</strong>
+                  <a
+                    class="callsign"
+                    [href]="'https://www.qrz.com/db/' + heard.callsign"
+                    [attr.aria-label]="heard.callsign + ' on QRZ.com'"
+                  >
+                    {{ heard.callsign }}
+                  </a>
                   @if (heard.alerted) {
                     <span class="alert-badge">Alerted</span>
                     <button

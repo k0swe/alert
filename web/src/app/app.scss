@@ -229,7 +229,15 @@ tbody tr:last-child td {
   color: #153c28;
   font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
   font-size: 1.05rem;
+  font-weight: 700;
   letter-spacing: 0.04em;
+  text-decoration-color: #9aafa0;
+  text-underline-offset: 0.18rem;
+}
+
+.callsign:hover {
+  color: #286845;
+  text-decoration-color: currentColor;
 }
 
 .alert-badge {
