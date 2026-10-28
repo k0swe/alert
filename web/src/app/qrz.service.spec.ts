@@ -146,6 +146,34 @@ describe('QrzService', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it('normalizes names already stored in the persistent cache', async () => {
+    service.setCredentials({ username: 'k0swe', password: '***' });
+    localStorage.setItem(
+      'qrz-directory-cache-v1',
+      JSON.stringify({
+        entries: {
+          'K0SWE:W1AW': {
+            cachedAt: Date.now(),
+            record: {
+              callsign: 'W1AW',
+              state: 'CT',
+              country: 'United States',
+              name: 'JAMES N "Noel" WARF',
+              grid: 'FN31pr',
+            },
+          },
+        },
+      }),
+    );
+    const fetchMock = vi.spyOn(globalThis, 'fetch');
+
+    await expect(service.lookup('W1AW')).resolves.toMatchObject({
+      name: 'James N "Noel" Warf',
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(localStorage.getItem('qrz-directory-cache-v1')).toContain('James N');
+  });
+
   it('refreshes a persistent cache entry after seven days', async () => {
     service.setCredentials({ username: 'k0swe', password: 'secret' });
     const fetchMock = vi

@@ -5,12 +5,13 @@ const ACADEMIC_SUFFIX = /^(?:PHD|MD|DDS|DVM|ESQ)$/i;
 /**
  * Normalize database-style names while preserving capitalization that a person has already set.
  *
- * This intentionally changes only names that contain no lowercase letters. Correct personal-name
- * capitalization is not fully inferable, so mixed-case values such as "deGrasse" remain untouched.
+ * This intentionally changes only individual words that contain no lowercase letters. Correct
+ * personal-name capitalization is not fully inferable, so mixed-case words such as "deGrasse" and
+ * quoted nicknames such as "Noel" remain untouched while surrounding all-caps words are fixed.
  */
 export function normalizePersonName(value: string): string {
   const normalizedWhitespace = value.trim().replace(/\s+/g, ' ');
-  if (!normalizedWhitespace || /\p{Ll}/u.test(normalizedWhitespace)) {
+  if (!normalizedWhitespace) {
     return normalizedWhitespace;
   }
 
@@ -22,7 +23,7 @@ export function normalizePersonName(value: string): string {
 
 function normalizeWord(word: string): string {
   const { leading, core, trailing } = splitOuterPunctuation(word);
-  if (!core) {
+  if (!core || /\p{Ll}/u.test(core)) {
     return word;
   }
 
