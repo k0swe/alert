@@ -7,7 +7,7 @@ const sessionXml = `<?xml version="1.0"?>
 const callsignXml = `<?xml version="1.0"?>
 <QRZDatabase>
   <Callsign>
-    <call>W1AW</call><fname>ARRL</fname><name>HQ</name><state>CT</state>
+    <call>W1AW</call><fname>FRED L</fname><name>LLOYD</name><state>CT</state>
     <country>United States</country><grid>FN31pr</grid>
   </Callsign>
   <Session><Key>session-key</Key><Count>2</Count></Session>
@@ -41,7 +41,7 @@ describe('QrzService', () => {
       callsign: 'W1AW',
       state: 'CT',
       country: 'United States',
-      name: 'ARRL HQ',
+      name: 'Fred L Lloyd',
       grid: 'FN31pr',
     });
 

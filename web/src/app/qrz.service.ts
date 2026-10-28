@@ -1,4 +1,5 @@
 import { Injectable } from '@angular/core';
+import { normalizePersonName } from './person-name';
 
 const QRZ_ENDPOINT = 'https://xmldata.qrz.com/xml/current/';
 const QRZ_USERNAME_KEY = 'qrz-username';
@@ -167,12 +168,12 @@ export class QrzService {
   private formatName(callsignNode: Element): string | null {
     const formatted = this.childText(callsignNode, 'name_fmt');
     if (formatted) {
-      return formatted;
+      return normalizePersonName(formatted);
     }
     const name = [this.childText(callsignNode, 'fname'), this.childText(callsignNode, 'name')]
       .filter(Boolean)
       .join(' ');
-    return name || null;
+    return name ? normalizePersonName(name) : null;
   }
 
   private isSessionError(error: string): boolean {
