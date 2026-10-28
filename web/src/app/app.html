@@ -53,6 +53,9 @@
               <tr>
                 <td>
                   <strong class="callsign">{{ heard.callsign }}</strong>
+                  @if (heard.alerted) {
+                    <span class="alert-badge">Alerted</span>
+                  }
                 </td>
                 <td class="directory-cell">
                   @switch (heard.qrzStatus) {
@@ -183,9 +186,53 @@
       </p>
     </fieldset>
 
+    <fieldset>
+      <legend>State alerts</legend>
+
+      <div class="state-alert-heading">
+        <p class="field-hint">
+          Play a sound and show a desktop notification when a heard callsign matches a selected
+          state.
+        </p>
+        <span class="selection-count">{{ configAlertStates.length }} selected</span>
+      </div>
+
+      <label class="state-option state-option--all">
+        <input
+          type="checkbox"
+          [checked]="allAlertStatesSelected()"
+          [indeterminate]="someAlertStatesSelected()"
+          (change)="toggleAllAlertStates($any($event.target).checked)"
+        />
+        <span>Select all 50 states</span>
+      </label>
+
+      <div class="state-grid">
+        @for (state of usStates; track state.code) {
+          <label class="state-option" [title]="state.name">
+            <input
+              type="checkbox"
+              [checked]="configAlertStates.includes(state.code)"
+              (change)="toggleAlertState(state.code, $any($event.target).checked)"
+            />
+            <span
+              ><strong>{{ state.code }}</strong> {{ state.name }}</span
+            >
+          </label>
+        }
+      </div>
+
+      <div class="alert-test-row">
+        <p class="field-hint">{{ notificationStatus }}</p>
+        <button class="button button--ghost button--compact" type="button" (click)="testAlert()">
+          Test alert
+        </button>
+      </div>
+    </fieldset>
+
     <div class="dialog-actions">
       <button class="button button--ghost" type="button" (click)="closeSettings()">Cancel</button>
-      <button class="button button--primary" type="submit">Save and connect</button>
+      <button class="button button--primary" type="submit">Save settings</button>
     </div>
   </form>
 </dialog>
