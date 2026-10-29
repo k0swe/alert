@@ -7,8 +7,11 @@ const QRZ_PASSWORD_KEY = 'qrz-password';
 const QRZ_CACHE_KEY = 'qrz-directory-cache-v1';
 const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_CACHE_ENTRIES = 500;
-const BATCH_DELAY_MS = 2_000;
-const REQUEST_SPACING_MS = 1_000;
+const BATCH_DELAY_MS = 200;
+const INITIAL_REQUEST_SPACING_MS = 200;
+const MAX_REQUEST_SPACING_MS = 30_000;
+const RATE_LIMIT_RETRIES = 5;
+const SUCCESS_RECOVERY_MS = 100;
 
 export interface QrzCredentials {
   username: string;
@@ -34,6 +37,7 @@ interface QrzCache {
 
 interface QueuedLookup {
   callsign: string;
+  rateLimitRetries: number;
   resolve: (record: QrzCallsign) => void;
   reject: (error: unknown) => void;
 }
@@ -42,6 +46,18 @@ export class QrzLookupError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'QrzLookupError';
+  }
+}
+
+export class QrzRateLimitError extends QrzLookupError {
+  constructor(
+    message: string,
+    readonly retryAfterMs: number | null = null,
+    readonly signal: 'http' | 'session' = 'session',
+    readonly httpStatus: number | null = null,
+  ) {
+    super(message);
+    this.name = 'QrzRateLimitError';
   }
 }
 
@@ -54,6 +70,8 @@ export class QrzService {
   private readonly queue: QueuedLookup[] = [];
   private batchTimer: ReturnType<typeof setTimeout> | null = null;
   private processingQueue = false;
+  private requestSpacingMs = INITIAL_REQUEST_SPACING_MS;
+  private nextRequestAt = 0;
 
   getCredentials(): QrzCredentials {
     return {
@@ -71,6 +89,7 @@ export class QrzService {
     localStorage.setItem(QRZ_USERNAME_KEY, credentials.username.trim());
     localStorage.setItem(QRZ_PASSWORD_KEY, credentials.password);
     this.resetSession();
+    this.resetRequestRate();
     this.memoryCache.clear();
   }
 
@@ -87,7 +106,7 @@ export class QrzService {
     }
 
     const lookup = new Promise<QrzCallsign>((resolve, reject) => {
-      this.queue.push({ callsign: normalizedCallsign, resolve, reject });
+      this.queue.push({ callsign: normalizedCallsign, rateLimitRetries: 0, resolve, reject });
     });
     this.pendingLookups.set(normalizedCallsign, lookup);
     this.scheduleBatch();
@@ -96,6 +115,7 @@ export class QrzService {
 
   reset(): void {
     this.resetSession();
+    this.resetRequestRate();
     this.memoryCache.clear();
   }
 
@@ -122,18 +142,32 @@ export class QrzService {
           break;
         }
 
+        let completed = true;
         try {
           const record = await this.lookupWithRetry(queued.callsign, true);
           this.storeCached(queued.callsign, record);
+          this.recoverRequestRate();
           queued.resolve(record);
         } catch (error) {
-          queued.reject(error);
+          if (error instanceof QrzRateLimitError) {
+            const willRetry = queued.rateLimitRetries < RATE_LIMIT_RETRIES;
+            if (willRetry) {
+              queued.rateLimitRetries += 1;
+              this.applyRateLimitBackoff(error.retryAfterMs);
+              this.queue.unshift(queued);
+              completed = false;
+            }
+            this.logRateLimit(queued, error, willRetry);
+            if (!willRetry) {
+              queued.reject(error);
+            }
+          } else {
+            queued.reject(error);
+          }
         } finally {
-          this.pendingLookups.delete(queued.callsign);
-        }
-
-        if (this.queue.length > 0) {
-          await this.delay(REQUEST_SPACING_MS);
+          if (completed) {
+            this.pendingLookups.delete(queued.callsign);
+          }
         }
       }
     } finally {
@@ -165,6 +199,13 @@ export class QrzService {
 
     const error =
       this.text(document, 'Session', 'Error') ?? 'QRZ did not return a callsign record.';
+    const message = this.text(document, 'Session', 'Message');
+    const rateLimitMessage = [error, message].find(
+      (value) => value && this.isRateLimitMessage(value),
+    );
+    if (rateLimitMessage) {
+      throw new QrzRateLimitError(rateLimitMessage, null, 'session');
+    }
     if (allowRelogin && this.isSessionError(error)) {
       this.resetSession();
       return this.lookupWithRetry(callsign, false);
@@ -210,6 +251,8 @@ export class QrzService {
   }
 
   private async request(parameters: Record<string, string>): Promise<Document> {
+    await this.waitForRequestSlot();
+
     let response: Response;
     try {
       response = await fetch(QRZ_ENDPOINT, {
@@ -221,11 +264,20 @@ export class QrzService {
       throw new QrzLookupError('Unable to reach the QRZ.com directory service.');
     }
 
+    const body = await response.text();
+    if (response.status === 429 || (!response.ok && this.isRateLimitMessage(body))) {
+      throw new QrzRateLimitError(
+        `QRZ.com rate limited this client (HTTP ${response.status}).`,
+        this.retryAfterMilliseconds(response.headers.get('Retry-After')),
+        'http',
+        response.status,
+      );
+    }
     if (!response.ok) {
       throw new QrzLookupError(`QRZ.com returned HTTP ${response.status}.`);
     }
 
-    const document = new DOMParser().parseFromString(await response.text(), 'application/xml');
+    const document = new DOMParser().parseFromString(body, 'application/xml');
     if (document.getElementsByTagName('parsererror').length > 0) {
       throw new QrzLookupError('QRZ.com returned an invalid XML response.');
     }
@@ -316,6 +368,68 @@ export class QrzService {
   private resetSession(): void {
     this.sessionKey = null;
     this.sessionPromise = null;
+  }
+
+  private async waitForRequestSlot(): Promise<void> {
+    const waitMs = Math.max(0, this.nextRequestAt - Date.now());
+    if (waitMs > 0) {
+      await this.delay(waitMs);
+    }
+    this.nextRequestAt = Date.now() + this.requestSpacingMs;
+  }
+
+  private applyRateLimitBackoff(retryAfterMs: number | null): void {
+    this.requestSpacingMs = Math.min(
+      MAX_REQUEST_SPACING_MS,
+      Math.max(this.requestSpacingMs * 2, retryAfterMs ?? 0),
+    );
+    this.nextRequestAt = Math.max(this.nextRequestAt, Date.now() + this.requestSpacingMs);
+  }
+
+  private recoverRequestRate(): void {
+    this.requestSpacingMs = Math.max(
+      INITIAL_REQUEST_SPACING_MS,
+      this.requestSpacingMs - SUCCESS_RECOVERY_MS,
+    );
+  }
+
+  private resetRequestRate(): void {
+    this.requestSpacingMs = INITIAL_REQUEST_SPACING_MS;
+    this.nextRequestAt = 0;
+  }
+
+  private logRateLimit(queued: QueuedLookup, error: QrzRateLimitError, willRetry: boolean): void {
+    console.warn('[QRZ] Rate limited; adaptive backoff applied.', {
+      callsign: queued.callsign,
+      signal: error.signal,
+      httpStatus: error.httpStatus,
+      message: error.message,
+      serverRetryAfterMs: error.retryAfterMs,
+      retry: queued.rateLimitRetries,
+      maxRetries: RATE_LIMIT_RETRIES,
+      nextRequestSpacingMs: this.requestSpacingMs,
+      queuedLookups: this.queue.length,
+      willRetry,
+      observedAt: new Date().toISOString(),
+    });
+  }
+
+  private retryAfterMilliseconds(value: string | null): number | null {
+    if (!value) {
+      return null;
+    }
+    const seconds = Number(value);
+    if (Number.isFinite(seconds)) {
+      return Math.max(0, seconds * 1000);
+    }
+    const date = Date.parse(value);
+    return Number.isNaN(date) ? null : Math.max(0, date - Date.now());
+  }
+
+  private isRateLimitMessage(message: string): boolean {
+    return /rate[ -]?limit|too many (?:requests|queries|lookups)|excessive (?:requests|queries|lookups)|throttl|(?:query|request) limit/i.test(
+      message,
+    );
   }
 
   private delay(milliseconds: number): Promise<void> {
