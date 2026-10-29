@@ -45,7 +45,7 @@
               <th scope="col">Callsign</th>
               <th scope="col">Directory</th>
               <th scope="col">Signal</th>
-              <th scope="col">Last heard</th>
+              <th scope="col">Last heard (UTC)</th>
             </tr>
           </thead>
           <tbody>
@@ -105,8 +105,10 @@
                   </span>
                 </td>
                 <td>
-                  <time [attr.datetime]="heard.lastHeard | date: 'yyyy-MM-ddTHH:mm:ssXXX'">
-                    {{ heard.lastHeard | date: 'mediumTime' }}
+                  <time
+                    [attr.datetime]="heard.lastHeard | date: 'yyyy-MM-dd\'T\'HH:mm:ss\'Z\'' : 'UTC'"
+                  >
+                    {{ heard.lastHeard | date: 'HH:mm:ss' : 'UTC' }}
                   </time>
                 </td>
               </tr>
