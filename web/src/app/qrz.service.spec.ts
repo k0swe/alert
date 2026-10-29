@@ -2,8 +2,8 @@ import { TestBed } from '@angular/core/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { QrzLookupError, QrzService } from './qrz.service';
 
-const BATCH_DELAY_MS = 2_000;
-const REQUEST_SPACING_MS = 1_000;
+const BATCH_DELAY_MS = 200;
+const REQUEST_SPACING_MS = 200;
 const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const sessionXml = `<?xml version="1.0"?>
 <QRZDatabase><Session><Key>session-key</Key><Count>1</Count></Session></QRZDatabase>`;
@@ -48,7 +48,7 @@ describe('QrzService', () => {
 
     const lookup = service.lookup('w1aw');
     expect(fetchMock).not.toHaveBeenCalled();
-    await vi.advanceTimersByTimeAsync(BATCH_DELAY_MS);
+    await vi.advanceTimersByTimeAsync(BATCH_DELAY_MS + REQUEST_SPACING_MS);
 
     await expect(lookup).resolves.toEqual({
       callsign: 'W1AW',
@@ -76,7 +76,7 @@ describe('QrzService', () => {
       .mockResolvedValueOnce(xmlResponse(callsignXml));
 
     const lookup = service.lookup('W1AW');
-    await vi.advanceTimersByTimeAsync(BATCH_DELAY_MS);
+    await vi.advanceTimersByTimeAsync(BATCH_DELAY_MS + REQUEST_SPACING_MS * 3);
 
     await expect(lookup).resolves.toMatchObject({ callsign: 'W1AW', state: 'CT' });
     expect(fetchMock).toHaveBeenCalledTimes(4);
@@ -98,7 +98,7 @@ describe('QrzService', () => {
     const w2 = service.lookup('W2ABC');
     expect(w1Duplicate).toBe(w1First);
 
-    await vi.advanceTimersByTimeAsync(BATCH_DELAY_MS);
+    await vi.advanceTimersByTimeAsync(BATCH_DELAY_MS + REQUEST_SPACING_MS);
     await expect(w1First).resolves.toMatchObject({ callsign: 'W1AW' });
     expect(fetchMock).toHaveBeenCalledTimes(2);
 
@@ -109,6 +109,85 @@ describe('QrzService', () => {
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
+  it('honors HTTP 429 Retry-After and logs structured diagnostics', async () => {
+    service.setCredentials({ username: 'k0swe', password: '***' });
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(xmlResponse(sessionXml))
+      .mockResolvedValueOnce(rateLimitResponse(2))
+      .mockResolvedValueOnce(xmlResponse(callsignXml));
+
+    const lookup = service.lookup('W1AW');
+    await vi.advanceTimersByTimeAsync(BATCH_DELAY_MS + REQUEST_SPACING_MS);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(warning).toHaveBeenCalledWith(
+      '[QRZ] Rate limited; adaptive backoff applied.',
+      expect.objectContaining({
+        callsign: 'W1AW',
+        signal: 'http',
+        httpStatus: 429,
+        serverRetryAfterMs: 2_000,
+        nextRequestSpacingMs: 2_000,
+        retry: 1,
+        willRetry: true,
+      }),
+    );
+
+    await vi.advanceTimersByTimeAsync(1_999);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(lookup).resolves.toMatchObject({ callsign: 'W1AW' });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it('backs off on a QRZ session error and recovers toward 5 QPS after successes', async () => {
+    service.setCredentials({ username: 'k0swe', password: '***' });
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const rateLimitedXml = `<?xml version="1.0"?>
+      <QRZDatabase><Session><Error>Too many requests; please slow down</Error></Session></QRZDatabase>`;
+    const w2Xml = callsignXml.replaceAll('W1AW', 'W2ABC');
+    const w3Xml = callsignXml.replaceAll('W1AW', 'W3XYZ');
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(xmlResponse(sessionXml))
+      .mockResolvedValueOnce(xmlResponse(rateLimitedXml))
+      .mockResolvedValueOnce(xmlResponse(callsignXml))
+      .mockResolvedValueOnce(xmlResponse(w2Xml))
+      .mockResolvedValueOnce(xmlResponse(w3Xml));
+
+    const w1 = service.lookup('W1AW');
+    const w2 = service.lookup('W2ABC');
+    const w3 = service.lookup('W3XYZ');
+
+    await vi.advanceTimersByTimeAsync(BATCH_DELAY_MS + REQUEST_SPACING_MS);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(warning).toHaveBeenCalledWith(
+      '[QRZ] Rate limited; adaptive backoff applied.',
+      expect.objectContaining({
+        signal: 'session',
+        httpStatus: null,
+        nextRequestSpacingMs: 400,
+      }),
+    );
+
+    await vi.advanceTimersByTimeAsync(399);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(w1).resolves.toMatchObject({ callsign: 'W1AW' });
+
+    await vi.advanceTimersByTimeAsync(399);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(w2).resolves.toMatchObject({ callsign: 'W2ABC' });
+
+    await vi.advanceTimersByTimeAsync(299);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(w3).resolves.toMatchObject({ callsign: 'W3XYZ' });
+    expect(fetchMock).toHaveBeenCalledTimes(5);
+  });
+
   it('uses the memory cache for repeated callsigns', async () => {
     service.setCredentials({ username: 'k0swe', password: 'secret' });
     const fetchMock = vi
@@ -117,7 +196,7 @@ describe('QrzService', () => {
       .mockResolvedValueOnce(xmlResponse(callsignXml));
 
     const firstLookup = service.lookup('W1AW');
-    await vi.advanceTimersByTimeAsync(BATCH_DELAY_MS);
+    await vi.advanceTimersByTimeAsync(BATCH_DELAY_MS + REQUEST_SPACING_MS);
     const first = await firstLookup;
     const second = await service.lookup('W1AW');
 
@@ -133,7 +212,7 @@ describe('QrzService', () => {
       .mockResolvedValueOnce(xmlResponse(callsignXml));
 
     const firstLookup = service.lookup('W1AW');
-    await vi.advanceTimersByTimeAsync(BATCH_DELAY_MS);
+    await vi.advanceTimersByTimeAsync(BATCH_DELAY_MS + REQUEST_SPACING_MS);
     await firstLookup;
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({});
@@ -183,7 +262,7 @@ describe('QrzService', () => {
       .mockResolvedValueOnce(xmlResponse(callsignXml));
 
     const firstLookup = service.lookup('W1AW');
-    await vi.advanceTimersByTimeAsync(BATCH_DELAY_MS);
+    await vi.advanceTimersByTimeAsync(BATCH_DELAY_MS + REQUEST_SPACING_MS);
     await firstLookup;
     vi.setSystemTime(Date.now() + CACHE_TTL_MS);
 
@@ -203,11 +282,11 @@ describe('QrzService', () => {
       .mockResolvedValueOnce(xmlResponse(callsignXml));
 
     const firstLookup = service.lookup('W1AW');
-    await vi.advanceTimersByTimeAsync(BATCH_DELAY_MS);
+    await vi.advanceTimersByTimeAsync(BATCH_DELAY_MS + REQUEST_SPACING_MS);
     await firstLookup;
     service.setCredentials({ username: 'another-user', password: 'secret' });
     const secondLookup = service.lookup('W1AW');
-    await vi.advanceTimersByTimeAsync(BATCH_DELAY_MS);
+    await vi.advanceTimersByTimeAsync(BATCH_DELAY_MS + REQUEST_SPACING_MS);
     await secondLookup;
 
     expect(fetchMock).toHaveBeenCalledTimes(4);
@@ -228,6 +307,13 @@ function xmlResponse(xml: string): Response {
   return new Response(xml, {
     status: 200,
     headers: { 'Content-Type': 'application/xml' },
+  });
+}
+
+function rateLimitResponse(retryAfterSeconds: number): Response {
+  return new Response('Too many requests', {
+    status: 429,
+    headers: { 'Retry-After': String(retryAfterSeconds) },
   });
 }
 
