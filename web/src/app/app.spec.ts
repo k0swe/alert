@@ -130,6 +130,24 @@ describe('App', () => {
     fixture.destroy();
   });
 
+  it('renders last-heard times as 24-hour UTC regardless of local timezone', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-29T01:05:09-06:00'));
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+
+    decode$.next(makeDecode('CQ W1AW FN31', -14));
+    fixture.detectChanges();
+
+    const time = fixture.nativeElement.querySelector('time') as HTMLTimeElement;
+    expect(time.textContent?.trim()).toBe('07:05:09');
+    expect(time.dateTime).toBe('2026-10-29T07:05:09Z');
+    expect(fixture.nativeElement.querySelector('th:last-child').textContent).toContain('UTC');
+
+    fixture.destroy();
+    vi.useRealTimers();
+  });
+
   it('enriches a heard callsign with its QRZ directory result', async () => {
     qrz.hasCredentials.mockReturnValue(true);
     qrz.lookup.mockResolvedValue({
