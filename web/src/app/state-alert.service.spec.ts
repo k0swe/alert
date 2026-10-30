@@ -98,6 +98,12 @@ describe('StateAlertService', () => {
     expect(service.alertIfNeeded(makeAlert('CT'))).toBe(true);
   });
 
+  it('uses Signal Bell branding for test notifications', async () => {
+    await service.test();
+
+    expect(NotificationMock.instances[0].title).toBe('Signal Bell is ready');
+  });
+
   it('requests notification permission when preparing alerts', async () => {
     NotificationMock.permission = 'default';
     NotificationMock.requestPermission.mockImplementationOnce(async () => {

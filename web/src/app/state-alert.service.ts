@@ -134,7 +134,7 @@ export class StateAlertService {
     await this.prepare();
     this.playSound();
     if ('Notification' in globalThis && Notification.permission === 'granted') {
-      new Notification('Alert is ready', {
+      new Notification('Signal Bell is ready', {
         body: 'Desktop notifications and sound are enabled.',
         tag: 'alert-test',
       });
