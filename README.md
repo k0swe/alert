@@ -1,6 +1,6 @@
 # Signal Bell
 
-Signal Bell watches amateur-radio activity and calls attention to stations the operator wants to work. It currently receives live WSJT-X decodes through [`ngx-kel-agent`](https://github.com/k0swe/ngx-kel-agent), enriches callsigns with the QRZ.com XML directory, and alerts on selected US states.
+Signal Bell watches amateur-radio activity and calls attention to stations the operator wants to work. It currently receives live WSJT-X decodes through [`kel-agent`](https://github.com/k0swe/kel-agent), enriches callsigns with the QRZ.com XML directory, and alerts on selected US states.
 
 ## Current capabilities
 
