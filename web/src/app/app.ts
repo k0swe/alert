@@ -1,9 +1,10 @@
-import { DatePipe } from '@angular/common';
+import { DatePipe, DOCUMENT } from '@angular/common';
 import {
   Component,
   DestroyRef,
   ElementRef,
   computed,
+  effect,
   inject,
   signal,
   viewChild,
@@ -81,11 +82,15 @@ export class App {
   private readonly qrz = inject(QrzService);
   private readonly stateAlerts = inject(StateAlertService);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly document = inject(DOCUMENT);
   private readonly settingsDialog =
     viewChild.required<ElementRef<HTMLDialogElement>>('settingsDialog');
   private readonly actionableDecodes = new Map<string, WsjtxDecode>();
 
   protected readonly heardCallsigns = signal<HeardCallsign[]>([]);
+  protected readonly hasActiveWantedCallsigns = computed(() =>
+    this.heardCallsigns().some((heard) => heard.alerted),
+  );
   protected readonly usStates = US_STATES;
   protected readonly connectionLevel = computed<ConnectionLevel>(() => {
     if (!this.agent.connected()) {
@@ -127,6 +132,7 @@ export class App {
   protected notificationStatus = '';
 
   constructor() {
+    effect(() => this.updateFavicon(this.hasActiveWantedCallsigns()));
     this.agent.init();
     this.wsjtx.decode$
       .pipe(takeUntilDestroyed(this.destroyRef))
@@ -356,6 +362,12 @@ export class App {
       (left, right) =>
         Number(right.alerted) - Number(left.alerted) || right.lastHeard - left.lastHeard,
     );
+  }
+
+  private updateFavicon(hasActiveAlerts: boolean): void {
+    this.document
+      .getElementById('alert-favicon')
+      ?.setAttribute('href', hasActiveAlerts ? 'favicon-alert.svg' : 'favicon.svg');
   }
 
   private getNotificationStatus(): string {
