@@ -63,6 +63,12 @@ describe('App', () => {
   };
 
   beforeEach(async () => {
+    document.getElementById('alert-favicon')?.remove();
+    const favicon = document.createElement('link');
+    favicon.id = 'alert-favicon';
+    favicon.rel = 'icon';
+    favicon.href = 'favicon.svg';
+    document.head.append(favicon);
     agentConnected.set(false);
     wsjtxConnected.set(false);
     vi.clearAllMocks();
@@ -88,6 +94,7 @@ describe('App', () => {
     expect(agent.init).toHaveBeenCalledOnce();
     const statusElement = fixture.nativeElement.querySelector('.connection-status');
     expect(statusElement.textContent).toContain('Disconnected');
+    expect(faviconHref()).toBe('favicon.svg');
     fixture.destroy();
   });
 
@@ -202,6 +209,7 @@ describe('App', () => {
       reset: false,
     });
     expect(fixture.nativeElement.querySelector('.alert-badge').textContent).toContain('Alerted');
+    expect(faviconHref()).toBe('favicon-alert.svg');
     const callButton = fixture.nativeElement.querySelector('.call-button') as HTMLButtonElement;
     expect(callButton.disabled).toBe(false);
     callButton.click();
@@ -270,6 +278,7 @@ describe('App', () => {
       reset: true,
     });
     expect(fixture.nativeElement.querySelector('.alert-badge')).toBeNull();
+    expect(faviconHref()).toBe('favicon.svg');
     fixture.destroy();
   });
 
@@ -338,6 +347,10 @@ describe('App', () => {
     vi.useRealTimers();
   });
 });
+
+function faviconHref(): string | null {
+  return document.getElementById('alert-favicon')?.getAttribute('href') ?? null;
+}
 
 function makeDecode(message: string, snr: number): WsjtxDecode {
   return {
