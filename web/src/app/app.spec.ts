@@ -92,6 +92,7 @@ describe('App', () => {
     fixture.detectChanges();
 
     expect(agent.init).toHaveBeenCalledOnce();
+    expect(fixture.nativeElement.querySelector('h1').textContent).toContain('Signal Bell');
     const statusElement = fixture.nativeElement.querySelector('.connection-status');
     expect(statusElement.textContent).toContain('Disconnected');
     expect(faviconHref()).toBe('favicon.svg');

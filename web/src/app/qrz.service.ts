@@ -238,7 +238,7 @@ export class QrzService {
     const document = await this.request({
       username: credentials.username,
       password: credentials.password,
-      agent: 'k0swe-alert-0.1',
+      agent: 'k0swe-signal-bell-0.1',
     });
     const key = this.text(document, 'Session', 'Key');
     if (!key) {

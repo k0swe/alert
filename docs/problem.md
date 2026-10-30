@@ -1,4 +1,4 @@
-# Problem Description
+# Signal Bell problem description
 
 ## Background
 
@@ -6,7 +6,7 @@ The operator is working toward the ARRL Worked All States (WAS) award for USA 25
 
 ## Goal
 
-Build a local Angular application that watches the operator's WSJT-X feed and provides an immediate alert when a decoded amateur-radio callsign appears to be in a state that is still needed for WAS.
+Build Signal Bell, an Angular application that watches the operator's WSJT-X feed and provides an immediate alert when a decoded amateur-radio callsign appears to be in a state that is still needed for WAS.
 
 ## Intended workflow
 
